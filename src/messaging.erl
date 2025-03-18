@@ -298,18 +298,20 @@ run_app(survey_app = AppName, App, StateId, History) ->
   Qs = anchor_qs(Q#question.anchor, App),
   survey_app(AppName, Qs, App, History);
 run_app(AppName, App, StateId, History) ->
+  % Store the app and history in the "Process Dictionary":
+  put(app, App),
+  put(history, History),
+
   State = proplists:get_value(StateId, App),
   OutMsg = State#app_state.msg,
   io:format("~p > ~s~n", [AppName, OutMsg]),
 
   receive
     print_state ->
-      io:format("~p is at ~p~n", [AppName, StateId]),
-      run_app(AppName, App, StateId, History);  % loop back to the same state
+      io:format("~p is at ~p~n", [AppName, StateId]);
 
     print_history ->
-      io:format("~p~n", [History]),
-      run_app(AppName, App, StateId, History);  % loop back to the same state
+      print_full_history(AppName);
 
     InMsg ->
       Logic = State#app_state.logic,
@@ -349,4 +351,28 @@ show_history(AppName) ->
     undefined -> io:format("Application ~p is not running~n", [AppName]);
     _Pid -> AppName ! print_history
   end,
+  ok.
+
+print_full_history(AppName) ->
+  History = get(history),
+  App = get(app),
+  lists:map(
+    fun({StateId, UserInput}) ->
+      State = proplists:get_value(StateId, App),
+
+      % Handle `app_state` and "question types":
+      Msg =
+        case State of
+          #app_state{} -> State#app_state.msg;
+          #question{} -> State#question.msg;
+          _ -> "Unknown state"
+        end,
+
+      io:format(
+        "~p > (app prompt) ~s~n~s > (user input) ~s~n",
+        [AppName, Msg, AppName, UserInput]
+      )
+    end,
+    lists:reverse(History)
+  ),
   ok.
