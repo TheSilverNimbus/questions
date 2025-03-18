@@ -1,21 +1,50 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @author TheSilverNimbus
 %%% @copyright (C) 2025, Precision Development (PxD)
 %%% @doc
-%%% TODO
-%%% @end
-%%%-------------------------------------------------------------------
+%%% Messaging module for Quick User Engagement & Survey Tool for Informational
+%%% and Outcome-based Navigation of (Selective) Subjects (QUESTIONS).
+%%% This module manages interactive applications with session handling,
+%%% persistent states, and user engagement flows.
+%%%-----------------------------------------------------------------------------
 -module(messaging).
 
 -author("TheSilverNimbus").
 
-%% API
--export([apps/0, run_app/5, launch_app/2, interact/3, show_state/2, show_history/2]).
+%% API exports
+-export([
+  apps/0, run_app/5, launch_app/2, interact/3, show_state/2, show_history/2
+]).
 
--record(app_state, {msg, logic}).
+%% Records
+-record(app_state, {
+  msg :: string(),
+  logic :: fun((term()) -> atom())
+}).
 
--record(question, {id, msg, opts = [], anchor = []}).
+-record(question, {
+  id :: atom(),
+  msg :: string(),
+  opts :: list(),
+  anchor :: list()
+}).
 
+%% Types
+-type app_name() :: atom().
+-type session_id() :: string().
+-type state_id() :: atom().
+-type history() :: list().
+-type process_name() :: atom().
+-type app() :: list().
+-type user_input() :: string().
+-type session_result() :: {ok, session_id()} | {error, term()}.
+
+%%%-----------------------------------------------------------------------------
+%%% Applications List
+%%%-----------------------------------------------------------------------------
+
+%% @doc Returns the list of available applications and their states.
+-spec apps() -> list().
 apps() ->
   [
     {
@@ -248,6 +277,12 @@ apps() ->
     }
   ].
 
+%%%-----------------------------------------------------------------------------
+%%% App Execution Loops
+%%%-----------------------------------------------------------------------------
+
+%% @doc Executes survey app session loop.
+-spec survey_app(app_name(), list(), app(), history()) -> no_return().
 survey_app(AppName, [], App, History) ->
   run_app(AppName, App, intro, History, 0);
 survey_app(AppName, [Q|Qs] = Questions, App, History) ->
@@ -287,12 +322,18 @@ survey_app(AppName, [Q|Qs] = Questions, App, History) ->
       end
   end.
 
+%% @doc Extracts anchored questions.
+-spec anchor_qs(list(), app()) -> list().
 anchor_qs(Anchor, App) ->
   [Q || Q <- App, Q#question.anchor =:= Anchor].
 
+%% @doc Updates the history with a new entry.
+-spec update_history({atom(), term()}, history()) -> history().
 update_history({Qid, _Ans} = H, History) ->
   lists:keystore(Qid, 1, History, H).
 
+%% @doc Runs the main loop for a given app and session.
+-spec run_app(app_name(), app(), state_id(), history(), session_id()) -> no_return().
 run_app(survey_app = AppName, App, StateId, History, _SessionId) ->
   Q = lists:keyfind(StateId, #question.id, App),
   Qs = anchor_qs(Q#question.anchor, App),
@@ -344,6 +385,12 @@ run_app(AppName, App, StateId, History, SessionId) ->
     {error, session_timed_out}
   end.
 
+%%%-------------------------------------------------------------------
+%%% Session Management APIs
+%%%-------------------------------------------------------------------
+
+%% @doc Launches a new application session.
+-spec launch_app(app_name(), state_id()) -> session_result().
 launch_app(AppName, InitStateId) ->
   case proplists:is_defined(AppName, messaging:apps()) of
     false ->
@@ -387,6 +434,8 @@ launch_app(AppName, InitStateId) ->
       end
   end.
 
+%% @doc Sends a user interaction to a session.
+-spec interact(app_name(), session_id(), user_input()) -> ok | {error, term()}.
 interact(AppName, SessionId, Msg) ->
   ProcessName = make_process_name(AppName, SessionId),
 
@@ -400,6 +449,9 @@ interact(AppName, SessionId, Msg) ->
       ok
   end.
 
+
+%% @doc Prints the current state of the session.
+-spec show_state(app_name(), session_id()) -> ok | {error, term()}.
 show_state(AppName, SessionId) ->
   ProcessName = make_process_name(AppName, SessionId),
 
@@ -413,6 +465,8 @@ show_state(AppName, SessionId) ->
       ok
   end.
 
+%% @doc Prints the session's interaction history.
+-spec show_history(app_name(), session_id()) -> ok | {error, term()}.
 show_history(AppName, SessionId) ->
   ProcessName = make_process_name(AppName, SessionId),
 
@@ -426,6 +480,12 @@ show_history(AppName, SessionId) ->
       ok
   end.
 
+%%%-------------------------------------------------------------------
+%%% Utility Functions
+%%%-------------------------------------------------------------------
+
+%% @doc Prints the session history.
+-spec print_full_history(app_name()) -> ok.
 print_full_history(AppName) ->
   History = get(history),
   App = get(app),
@@ -452,15 +512,21 @@ print_full_history(AppName) ->
 
   ok.
 
+%% @doc Returns filename for session state storage.
+-spec filename(app_name(), session_id()) -> string().
 filename(AppName, SessionId) ->
   "state_" ++ atom_to_list(AppName) ++ "_" ++ SessionId ++ ".dat".
 
+%% @doc Saves state and history.
+-spec save_state(app_name(), session_id(), state_id(), history()) -> ok | {error, term()}.
 save_state(AppName, SessionId, StateId, History) ->
   FileName = filename(AppName, SessionId),
   StateData = {StateId, History},
   Bin = term_to_binary(StateData),
   file:write_file(FileName, Bin).
 
+%% @doc Loads session state and history.
+-spec load_state(app_name(), session_id()) -> {state_id() | undefined, history()}.
 load_state(AppName, SessionId) ->
   FileName = filename(AppName, SessionId),
 
@@ -469,9 +535,17 @@ load_state(AppName, SessionId) ->
     {error, _} -> {undefined, []}  %% No saved state, start fresh
   end.
 
+%% @doc Generates a unique session ID.
+-spec make_session_id() -> session_id().
 make_session_id() ->
   UUID = crypto:strong_rand_bytes(16),
   lists:flatten([io_lib:format("~2.16.0B", [N]) || <<N>> <= UUID]).
 
+%% @doc Creates a unique process name for the session.
+-spec make_process_name(app_name(), session_id()) -> process_name().
 make_process_name(AppName, SessionId) ->
   list_to_atom(atom_to_list(AppName) ++ "_" ++ SessionId).
+
+%%%-----------------------------------------------------------------------------
+%%% End of module
+%%%-----------------------------------------------------------------------------
