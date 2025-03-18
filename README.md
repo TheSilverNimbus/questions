@@ -1,14 +1,10 @@
 # Q.U.E.S.T.I.O.N.S.
 
----
-
 ## Acronym Breakdown
 
 **QUESTIONS** stands for:
 > **Q**uick **U**ser **E**ngagement & **S**urvey **T**ool for **I**nformational
 > and **O**utcome-based **N**avigation of (Selective) **S**ubjects
-
----
 
 ## Overview
 
@@ -27,8 +23,6 @@ conversational applications that can:
 Each session is stateful, secure, and can persist user interactions and
 decisions across time.
 
----
-
 ## Key Features
 
 - ✅ **Session Management** with unique Session IDs.
@@ -36,8 +30,6 @@ decisions across time.
 - ✅ **Interactive Applications** (surveys, games, guided flows).
 - ✅ **Session Timeout Handling** for idle sessions.
 - ✅ **Customizable Logic** for branching and decision-making.
-
----
 
 ## Getting Started
 
@@ -76,8 +68,6 @@ messaging:show_state(adventure_game, SessionId).
 messaging:show_history(adventure_game, SessionId).
 ```
 
----
-
 ## Project Structure
 
 The primary files with the requisite functionality can be found in the following
@@ -91,8 +81,6 @@ project structure:
   rebar.config           % Project configuration
 ```
 
----
-
 ## How It Works
 
 - Every app is launched as an independent process, identified by an **AppName**
@@ -101,8 +89,6 @@ project structure:
   interactions.
 - State and history are persisted to disk and restored on process restarts.
 - Idle sessions automatically timeout and clean up after a configurable period.
-
----
 
 ## License
 
@@ -120,20 +106,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
----
-
 ## Author
 
 Developed by **Aniruddha Sen** ([@TheSilverNimbus][1]) for **Precision
 Development** ([@PrecisionDevelopment][2]).
 
----
-
 ## Contributing
 
 We welcome contributions! Please open an issue or submit a pull request.
-
----
 
 [1]: https://github.com/TheSilverNimbus
 
