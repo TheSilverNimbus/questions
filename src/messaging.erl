@@ -308,47 +308,72 @@ run_app(AppName, App, StateId, History) ->
 
   receive
     print_state ->
-      io:format("~p is at ~p~n", [AppName, StateId]);
+      io:format("~p is at ~p~n", [AppName, StateId]),
+      run_app(AppName, App, StateId, History);
 
     print_history ->
-      print_full_history(AppName);
+      print_full_history(AppName),
+      run_app(AppName, App, StateId, History);
 
     InMsg ->
       Logic = State#app_state.logic,
       NextStateId = Logic(InMsg),
       NewHistory = [{StateId, InMsg}|History], % update the history
+      save_state(AppName, NextStateId, NewHistory), %% Save app state
       run_app(AppName, App, NextStateId, NewHistory)
   end.
 
 launch_app(AppName, InitStateId) ->
-  Pid =
-    spawn(
-      messaging,
-      run_app,
-      [
-        AppName,
-        proplists:get_value(AppName, messaging:apps()),
-        InitStateId,
-        []
-      ]
-    ),
-  register(AppName, Pid),
+  case proplists:is_defined(AppName, messaging:apps()) of
+    false ->
+      io:format("Application `~p` is not defined~n", [AppName]);
+
+    true ->
+      {SavedStateId, SavedHistory} = load_state(AppName),
+
+      {StateId, History} =
+        case SavedStateId of
+          undefined -> {InitStateId, []};
+          _ -> {SavedStateId, SavedHistory}
+        end,
+
+      Pid =
+        spawn(
+          messaging,
+          run_app,
+          [
+            AppName,
+            proplists:get_value(AppName, messaging:apps()),
+            StateId,
+            History
+          ]
+        ),
+
+      case whereis(AppName) of
+        undefined -> register(AppName, Pid);
+        _Pid -> io:format("Application `~p` is already loaded~n", [AppName])
+      end
+  end,
   ok.
 
 interact(AppName, Msg) ->
-  AppName ! Msg,
+  case whereis(AppName) of
+    undefined ->
+      io:format("Application `~p` is not running~n", [AppName]);
+    _Pid -> AppName ! Msg
+  end,
   ok.
 
 show_state(AppName) ->
   case whereis(AppName) of
-    undefined -> io:format("Application ~p is not running~n", [AppName]);
+    undefined -> io:format("Application `~p` is not running~n", [AppName]);
     _Pid -> AppName ! print_state
   end,
   ok.
 
 show_history(AppName) ->
   case whereis(AppName) of
-    undefined -> io:format("Application ~p is not running~n", [AppName]);
+    undefined -> io:format("Application `~p` is not running~n", [AppName]);
     _Pid -> AppName ! print_history
   end,
   ok.
@@ -360,7 +385,7 @@ print_full_history(AppName) ->
     fun({StateId, UserInput}) ->
       State = proplists:get_value(StateId, App),
 
-      % Handle `app_state` and "question types":
+      % Handle `app_state` and `question` types:
       Msg =
         case State of
           #app_state{} -> State#app_state.msg;
@@ -376,3 +401,19 @@ print_full_history(AppName) ->
     lists:reverse(History)
   ),
   ok.
+
+filename(AppName) ->
+  "state_" ++ atom_to_list(AppName) ++ ".dat".
+
+save_state(AppName, StateId, History) ->
+  FileName = filename(AppName),
+  StateData = {StateId, History},
+  Bin = term_to_binary(StateData),
+  file:write_file(FileName, Bin).
+
+load_state(AppName) ->
+  FileName = filename(AppName),
+  case file:read_file(FileName) of
+    {ok, Bin} -> binary_to_term(Bin);
+    {error, _} -> {undefined, []}  %% No saved state, start fresh
+  end.
