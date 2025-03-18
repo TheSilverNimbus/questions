@@ -190,13 +190,18 @@ run_app(AppName, App, StateId, History) ->
 
   receive
     print_state ->
-      io:format("~p is at ~p~n", [AppName, StateId]);
+      io:format("~p is at ~p~n", [AppName, StateId]),
+      run_app(AppName, App, StateId, History);  % loop back to the same state
 
     print_history ->
-      io:format("~p~n", [History]);
+      io:format("~p~n", [History]),
+      run_app(AppName, App, StateId, History);  % loop back to the same state
 
     InMsg ->
-      % YOUR CODE HERE
+      Logic = State#app_state.logic,
+      NextStateId = Logic(InMsg),
+      NewHistory = [{StateId, InMsg}|History], % update the history
+      run_app(AppName, App, NextStateId, NewHistory)
   end.
 
 launch_app(AppName, InitStateId) ->
