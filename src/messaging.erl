@@ -10,7 +10,7 @@
 -author("TheSilverNimbus").
 
 %% API
--export([apps/0, run_app/4, launch_app/2, interact/2, show_state/1, show_history/1]).
+-export([apps/0, run_app/5, launch_app/2, interact/3, show_state/2, show_history/2]).
 
 -record(app_state, {msg, logic}).
 
@@ -249,7 +249,7 @@ apps() ->
   ].
 
 survey_app(AppName, [], App, History) ->
-  run_app(AppName, App, intro, History);
+  run_app(AppName, App, intro, History, 0);
 survey_app(AppName, [Q|Qs] = Questions, App, History) ->
   Qid = Q#question.id,
   Msg = Q#question.msg,
@@ -293,43 +293,67 @@ anchor_qs(Anchor, App) ->
 update_history({Qid, _Ans} = H, History) ->
   lists:keystore(Qid, 1, History, H).
 
-run_app(survey_app = AppName, App, StateId, History) ->
+run_app(survey_app = AppName, App, StateId, History, _SessionId) ->
   Q = lists:keyfind(StateId, #question.id, App),
   Qs = anchor_qs(Q#question.anchor, App),
   survey_app(AppName, Qs, App, History);
-run_app(AppName, App, StateId, History) ->
+run_app(AppName, App, StateId, History, SessionId) ->
   % Store the app and history in the "Process Dictionary":
   put(app, App),
   put(history, History),
+  put(session_id, SessionId),
 
   State = proplists:get_value(StateId, App),
   OutMsg = State#app_state.msg,
+
   io:format("~p > ~s~n", [AppName, OutMsg]),
 
   receive
+    {interact, SessionIdFromMsg, InMsg} ->
+      case SessionIdFromMsg of
+        SessionId ->
+          Logic = State#app_state.logic,
+          NextStateId = Logic(InMsg),
+          NewHistory = [{StateId, InMsg}|History],
+          save_state(AppName, SessionId, NextStateId, NewHistory),
+          run_app(AppName, App, NextStateId, NewHistory, SessionId);
+        _ ->
+          io:format("Invalid session ID: `~p`~n", [SessionIdFromMsg]),
+          run_app(AppName, App, StateId, History, SessionId)
+      end;
+
     print_state ->
       io:format("~p is at ~p~n", [AppName, StateId]),
-      run_app(AppName, App, StateId, History);
+      run_app(AppName, App, StateId, History, SessionId);
 
     print_history ->
       print_full_history(AppName),
-      run_app(AppName, App, StateId, History);
+      run_app(AppName, App, StateId, History, SessionId)
 
-    InMsg ->
-      Logic = State#app_state.logic,
-      NextStateId = Logic(InMsg),
-      NewHistory = [{StateId, InMsg}|History], % update the history
-      save_state(AppName, NextStateId, NewHistory), %% Save app state
-      run_app(AppName, App, NextStateId, NewHistory)
+  after 120000 ->
+    %% 120 second timeout
+    io:format(
+      "Session `~p` for app `~p` timed out due to inactivity~n",
+      [SessionId, AppName]
+    ),
+
+    ProcessName = make_process_name(AppName, SessionId),
+
+    unregister(ProcessName),
+
+    {error, session_timed_out}
   end.
 
 launch_app(AppName, InitStateId) ->
   case proplists:is_defined(AppName, messaging:apps()) of
     false ->
-      io:format("Application `~p` is not defined~n", [AppName]);
+      io:format("Application `~p` is not defined~n", [AppName]),
+      {error, undefined_app};
 
     true ->
-      {SavedStateId, SavedHistory} = load_state(AppName),
+      SessionId = make_session_id(),
+
+      {SavedStateId, SavedHistory} = load_state(AppName, SessionId),
 
       {StateId, History} =
         case SavedStateId of
@@ -345,42 +369,67 @@ launch_app(AppName, InitStateId) ->
             AppName,
             proplists:get_value(AppName, messaging:apps()),
             StateId,
-            History
+            History,
+            SessionId
           ]
         ),
 
-      case whereis(AppName) of
-        undefined -> register(AppName, Pid);
-        _Pid -> io:format("Application `~p` is already loaded~n", [AppName])
+      ProcessName = make_process_name(AppName, SessionId),
+
+      case whereis(ProcessName) of
+        undefined ->
+          register(ProcessName, Pid),
+          {ok, SessionId};
+
+        _Pid ->
+          io:format("A session for app `~p` is already loaded~n", [AppName]),
+          {error, app_already_loaded}
       end
-  end,
-  ok.
+  end.
 
-interact(AppName, Msg) ->
-  case whereis(AppName) of
+interact(AppName, SessionId, Msg) ->
+  ProcessName = make_process_name(AppName, SessionId),
+
+  case whereis(ProcessName) of
     undefined ->
-      io:format("Application `~p` is not running~n", [AppName]);
-    _Pid -> AppName ! Msg
-  end,
-  ok.
+      io:format("Session `~p` for app `~p` not found~n", [SessionId, AppName]),
+      {error, session_not_found};
 
-show_state(AppName) ->
-  case whereis(AppName) of
-    undefined -> io:format("Application `~p` is not running~n", [AppName]);
-    _Pid -> AppName ! print_state
-  end,
-  ok.
+    _Pid ->
+      ProcessName ! {interact, SessionId, Msg},
+      ok
+  end.
 
-show_history(AppName) ->
-  case whereis(AppName) of
-    undefined -> io:format("Application `~p` is not running~n", [AppName]);
-    _Pid -> AppName ! print_history
-  end,
-  ok.
+show_state(AppName, SessionId) ->
+  ProcessName = make_process_name(AppName, SessionId),
+
+  case whereis(ProcessName) of
+    undefined ->
+      io:format("Session `~p` for app `~p` not found~n", [SessionId, AppName]),
+      {error, session_not_found};
+
+    _Pid ->
+      ProcessName ! print_state,
+      ok
+  end.
+
+show_history(AppName, SessionId) ->
+  ProcessName = make_process_name(AppName, SessionId),
+
+  case whereis(ProcessName) of
+    undefined ->
+      io:format("Session `~p` for app `~p` not found~n", [SessionId, AppName]),
+      {error, session_not_found};
+
+    _Pid ->
+      ProcessName ! print_history,
+      ok
+  end.
 
 print_full_history(AppName) ->
   History = get(history),
   App = get(app),
+
   lists:map(
     fun({StateId, UserInput}) ->
       State = proplists:get_value(StateId, App),
@@ -400,20 +449,29 @@ print_full_history(AppName) ->
     end,
     lists:reverse(History)
   ),
+
   ok.
 
-filename(AppName) ->
-  "state_" ++ atom_to_list(AppName) ++ ".dat".
+filename(AppName, SessionId) ->
+  "state_" ++ atom_to_list(AppName) ++ "_" ++ SessionId ++ ".dat".
 
-save_state(AppName, StateId, History) ->
-  FileName = filename(AppName),
+save_state(AppName, SessionId, StateId, History) ->
+  FileName = filename(AppName, SessionId),
   StateData = {StateId, History},
   Bin = term_to_binary(StateData),
   file:write_file(FileName, Bin).
 
-load_state(AppName) ->
-  FileName = filename(AppName),
+load_state(AppName, SessionId) ->
+  FileName = filename(AppName, SessionId),
+
   case file:read_file(FileName) of
     {ok, Bin} -> binary_to_term(Bin);
     {error, _} -> {undefined, []}  %% No saved state, start fresh
   end.
+
+make_session_id() ->
+  UUID = crypto:strong_rand_bytes(16),
+  lists:flatten([io_lib:format("~2.16.0B", [N]) || <<N>> <= UUID]).
+
+make_process_name(AppName, SessionId) ->
+  list_to_atom(atom_to_list(AppName) ++ "_" ++ SessionId).
