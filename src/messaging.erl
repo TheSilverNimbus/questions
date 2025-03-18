@@ -131,6 +131,120 @@ apps() ->
           anchor = [{intro, "2"}]
         }
       ]
+    },
+    {
+      adventure_game,
+      [
+        {
+          intro,
+          #app_state{
+            msg =
+            "You stand at the entrance of a dark cave. Do you (1) Enter or (2) "
+            "Run away?",
+            logic =
+            fun(Resp) ->
+              case Resp of
+                "1" -> cave_entry;
+                "2" -> coward_ending;
+                _Otherwise -> intro
+              end
+            end
+          }
+        },
+        {
+          cave_entry,
+          #app_state{
+            msg =
+            "Inside the cave, you find two paths. Do you go (1) Left or (2) "
+            "Right?",
+            logic =
+            fun(Resp) ->
+              case Resp of
+                "1" -> left_path;
+                "2" -> right_path;
+                _Otherwise -> cave_entry
+              end
+            end
+          }
+        },
+        {
+          left_path,
+          #app_state{
+            msg =
+            "You see a treasure chest guarded by a sleeping dragon. Do you (1) "
+            "Fight or (2) Sneak?",
+            logic =
+            fun(Resp) ->
+              case Resp of
+                "1" -> fight_dragon;
+                "2" -> sneak_past;
+                _Otherwise -> left_path
+              end
+            end
+          }
+        },
+        {
+          fight_dragon,
+          #app_state{
+            msg =
+            "You bravely fight the dragon! It's a tough battle... but you win! "
+            "You take the treasure and leave the cave victorious!",
+            logic = fun(_) -> intro end
+          }
+        },
+        {
+          sneak_past,
+          #app_state{
+            msg = "You try to sneak past the dragon... but it wakes up! You "
+            "run for your life, barely escaping. You survive but without the "
+            "treasure.",
+            logic = fun(_) -> intro end
+          }
+        },
+        {
+          right_path,
+          #app_state{
+            msg =
+            "You step on a trap! Do you (1) Try to disarm it or (2) Retreat "
+            "carefully?",
+            logic =
+            fun(Resp) ->
+              case Resp of
+                "1" -> disarm_trap;
+                "2" -> retreat;
+                _Otherwise -> right_path
+              end
+            end
+          }
+        },
+        {
+          disarm_trap,
+          #app_state{
+            msg =
+            "You carefully disarm the trap. Success! You find a hidden exit "
+            "and escape safely with some small treasure.",
+            logic = fun(_) -> intro end
+          }
+        },
+        {
+          retreat,
+          #app_state{
+            msg =
+            "You carefully retreat and return to the cave entrance. Maybe "
+            "another day...",
+            logic = fun(_) -> intro end
+          }
+        },
+        {
+          coward_ending,
+          #app_state{
+            msg =
+            "You run away, never knowing what treasures (or dangers) lay "
+            "within the cave...",
+            logic = fun(_) -> intro end
+          }
+        }
+      ]
     }
   ].
 
