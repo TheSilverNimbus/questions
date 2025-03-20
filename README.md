@@ -110,11 +110,3 @@ limitations under the License.
 
 Developed by **Aniruddha Sen** ([@TheSilverNimbus][1]) for **Precision
 Development** ([@PrecisionDevelopment][2]).
-
-## Contributing
-
-We welcome contributions! Please open an issue or submit a pull request.
-
-[1]: https://github.com/TheSilverNimbus
-
-[2]: https://github.com/PrecisionDevelopment
